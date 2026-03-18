@@ -42,7 +42,7 @@ Thumbs.db
 Dockerfile*
 docker-compose*.yml
 nginx/
-
+.env
 # Environment & secrets
 !.env.example
 .env
