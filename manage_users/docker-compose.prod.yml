@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   # =============================================================================
-  # PostgreSQL Database (официальный образ)
+  # PostgreSQL Database
   # =============================================================================
   db:
     image: postgres:15-alpine
@@ -13,7 +11,7 @@ services:
       POSTGRES_USER: ${DB_USER:-manage_users_admin}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - postgres_/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - app_network
     healthcheck:
@@ -26,10 +24,10 @@ services:
       - "127.0.0.1:5432:5432"
 
   # =============================================================================
-  # Django Application (ОБРАЗ С DOCKER HUB)
+  # Django Application
   # =============================================================================
   django:
-    image: cubinez85/manage_users-django:1.0.0  # ← Образ с Docker Hub!
+    image: cubinez85/manage_users-django:1.0.0
     container_name: manage_users_django
     restart: unless-stopped
     depends_on:
@@ -43,7 +41,7 @@ services:
       DB_PORT: 5432
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG:-False}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,manage-users.cubinez.ru}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,manage-users.cubinez.ru,django,nginx}
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
       DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-admin@cubinez.ru}
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
@@ -54,15 +52,31 @@ services:
       - app_network
     expose:
       - "8000"
+
+    # 🔧 Универсальная команда Gunicorn
+    command: >
+      gunicorn manage_users.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 3
+      --timeout 120
+      --keep-alive 5
+      --max-requests 1000
+      --max-requests-jitter 50
+      --access-logfile -
+      --error-logfile -
+      --log-level info
+      --capture-output
+
+    # 🔧 Простой healthcheck на уровне сокета (не зависит от HTTP)
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/admin/')"]
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 8000)); s.close()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
   # =============================================================================
-  # Nginx Reverse Proxy (официальный образ)
+  # Nginx Reverse Proxy
   # =============================================================================
   nginx:
     image: nginx:alpine-slim
@@ -72,7 +86,7 @@ services:
       django:
         condition: service_healthy
     ports:
-      - "80:80"
+      - "127.0.0.1:8081:80"
     volumes:
       - static_volume:/app/static:ro
       - ./logs/nginx:/var/log/nginx
@@ -88,13 +102,19 @@ services:
       retries: 3
       start_period: 10s
 
+# =============================================================================
+# Networks
+# =============================================================================
 networks:
   app_network:
     driver: bridge
     name: manage_users_network
 
+# =============================================================================
+# Volumes
+# =============================================================================
 volumes:
-  postgres_
+  postgres_data:
     name: manage_users_postgres_data
   static_volume:
     name: manage_users_static
