@@ -14,8 +14,10 @@ services:
       POSTGRES_DB: ${DB_NAME:-manage_users_db}
       POSTGRES_USER: ${DB_USER:-manage_users_admin}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      PGPASSFILE: /var/lib/postgresql/.pgpas
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ~/.pgpass:/var/lib/postgresql/.pgpass:ro
     networks:
       - app_network
     healthcheck:
